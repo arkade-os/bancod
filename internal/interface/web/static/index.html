@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bancod</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">◇</span>
+        <span class="brand-name">bancod</span>
+      </div>
+      <nav class="nav" id="nav">
+        <button class="nav-item" data-section="pairs" aria-current="page">
+          <span class="nav-icon">◇</span> Pairs
+        </button>
+        <button class="nav-item" data-section="balance">
+          <span class="nav-icon">◉</span> Balance
+        </button>
+        <button class="nav-item" data-section="history">
+          <span class="nav-icon">⏱</span> History
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="status-pill" id="status-pill">
+          <span class="dot"></span>
+          <span id="status-text">—</span>
+        </span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Pairs -->
+      <section class="view" id="view-pairs">
+        <header class="view-head">
+          <div>
+            <h1>Trading pairs</h1>
+            <p class="muted">Configure the pairs the solver will fulfill offers on.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-add-pair">
+            <span>＋</span> Add pair
+          </button>
+        </header>
+
+        <div class="card">
+          <table class="table" id="pairs-table">
+            <thead>
+              <tr>
+                <th>Pair</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Price feed</th>
+                <th>Invert</th>
+                <th class="actions-col"></th>
+              </tr>
+            </thead>
+            <tbody id="pairs-body">
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+            </tbody>
+          </table>
+          <div class="empty" id="pairs-empty" hidden>
+            <p>No pairs yet.</p>
+            <button class="btn btn-primary" id="btn-add-first-pair">Add your first pair</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Balance -->
+      <section class="view" id="view-balance" hidden>
+        <header class="view-head">
+          <div>
+            <h1>Balance</h1>
+            <p class="muted">Wallet funds available to the taker.</p>
+          </div>
+          <button class="btn" id="btn-refresh-balance">↻ Refresh</button>
+        </header>
+
+        <div class="card card-hero">
+          <div class="hero-label">Offchain total</div>
+          <div class="hero-value" id="offchain-sats">—</div>
+          <div class="hero-sub" id="offchain-btc">—</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-label">Onchain confirmed</div>
+            <div class="card-value" id="onchain-confirmed">—</div>
+            <div class="card-sub" id="onchain-confirmed-btc">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Onchain locked</div>
+            <div class="card-value" id="onchain-locked">—</div>
+            <div class="card-sub" id="onchain-locked-btc">—</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="card-row-label">Offchain address</div>
+            <div class="card-row-value">
+              <code id="offchain-address" class="mono trunc">—</code>
+              <button class="btn btn-ghost" data-copy="#offchain-address">Copy</button>
+            </div>
+          </div>
+          <div class="card-row">
+            <div class="card-row-label">Boarding address</div>
+            <div class="card-row-value">
+              <code id="boarding-address" class="mono trunc">—</code>
+              <button class="btn btn-ghost" data-copy="#boarding-address">Copy</button>
+            </div>
+          </div>
+          <div class="card-row">
+            <button class="btn" id="btn-new-addresses">Get new addresses</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="view" id="view-history" hidden>
+        <header class="view-head">
+          <div>
+            <h1>History</h1>
+            <p class="muted">Past offers fulfilled by the solver.</p>
+          </div>
+          <button class="btn" id="btn-refresh-trades">↻ Refresh</button>
+        </header>
+
+        <div class="card">
+          <table class="table" id="trades-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Pair</th>
+                <th>Deposit</th>
+                <th>Want</th>
+                <th>Offer tx</th>
+                <th>Fulfill tx</th>
+              </tr>
+            </thead>
+            <tbody id="trades-body">
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+            </tbody>
+          </table>
+          <div class="empty" id="trades-empty" hidden>
+            <div class="placeholder-art">⏱</div>
+            <p>No trades yet.</p>
+            <p class="muted">When the solver fulfills an offer it will appear here.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Pair form dialog -->
+    <dialog id="pair-dialog" class="dialog">
+      <form method="dialog" id="pair-form" class="dialog-form">
+        <header class="dialog-head">
+          <h2 id="dialog-title">Add pair</h2>
+          <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+        </header>
+
+        <label class="field">
+          <span>Pair</span>
+          <input name="pair" type="text" placeholder="ASSETID/BTC or BTC/ASSETID" required pattern=".+/.+" />
+          <small class="muted">Use <code>BTC</code> or a hex asset ID on each side.</small>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>Min (sats)</span>
+            <input name="min_amount" type="number" min="1" required />
+          </label>
+          <label class="field">
+            <span>Max (sats)</span>
+            <input name="max_amount" type="number" min="1" required />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Price feed URL</span>
+          <input name="price_feed" type="url" placeholder="https://api.example.com/price" required />
+        </label>
+
+        <label class="checkbox">
+          <input name="invert_price" type="checkbox" />
+          <span>Invert price</span>
+        </label>
+
+        <footer class="dialog-foot">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="pair-submit">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- Toast stack -->
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

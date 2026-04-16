@@ -1,0 +1,84 @@
+syntax = "proto3";
+package bancod.v1;
+option go_package = "github.com/arkade-os/bancod/api-spec/protobuf/gen/bancod/v1";
+
+import "google/api/annotations.proto";
+
+service BancoService {
+  rpc AddPair(AddPairRequest) returns (AddPairResponse) {
+    option (google.api.http) = { post: "/v1/pair" body: "*" };
+  }
+  rpc UpdatePair(UpdatePairRequest) returns (UpdatePairResponse) {
+    option (google.api.http) = { put: "/v1/pair" body: "*" };
+  }
+  rpc RemovePair(RemovePairRequest) returns (RemovePairResponse) {
+    option (google.api.http) = { delete: "/v1/pair/{pair}" };
+  }
+  rpc ListPairs(ListPairsRequest) returns (ListPairsResponse) {
+    option (google.api.http) = { get: "/v1/pairs" };
+  }
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+    option (google.api.http) = { get: "/v1/status" };
+  }
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse) {
+    option (google.api.http) = { get: "/v1/balance" };
+  }
+  rpc GetAddress(GetAddressRequest) returns (GetAddressResponse) {
+    option (google.api.http) = { get: "/v1/address" };
+  }
+  rpc ListTrades(ListTradesRequest) returns (ListTradesResponse) {
+    option (google.api.http) = { get: "/v1/trades" };
+  }
+}
+
+message PairInfo {
+  string pair = 1;
+  uint64 min_amount = 2;
+  uint64 max_amount = 3;
+  string price_feed = 6;
+  bool invert_price = 7;
+}
+
+message AddPairRequest { PairInfo pair = 1; }
+message AddPairResponse {}
+message UpdatePairRequest { PairInfo pair = 1; }
+message UpdatePairResponse {}
+message RemovePairRequest { string pair = 1; }
+message RemovePairResponse {}
+message ListPairsRequest {}
+message ListPairsResponse { repeated PairInfo pairs = 1; }
+message GetStatusRequest {}
+message GetStatusResponse { bool running = 1; }
+message GetBalanceRequest {}
+message GetBalanceResponse {
+  uint64 onchain_confirmed = 1;
+  uint64 onchain_unconfirmed = 2;
+  uint64 offchain_settled = 3;
+  uint64 offchain_pending = 4;
+  uint64 offchain_swept = 5;
+}
+message GetAddressRequest {}
+message GetAddressResponse {
+  string offchain_address = 1;
+  string boarding_address = 2;
+}
+
+message TradeInfo {
+  int64 id = 1;
+  string pair = 2;
+  string deposit_asset = 3;
+  uint64 deposit_amount = 4;
+  string want_asset = 5;
+  uint64 want_amount = 6;
+  string offer_txid = 7;
+  string fulfill_txid = 8;
+  int64 created_at = 9;
+}
+
+message ListTradesRequest {
+  int32 limit = 1;
+}
+
+message ListTradesResponse {
+  repeated TradeInfo trades = 1;
+}
