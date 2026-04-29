@@ -1,4 +1,4 @@
-.PHONY: build clean cov docker format help integrationtest lint proto setup-test-env sqlc teardown-test-env test vet
+.PHONY: build clean cov docker docker-run docker-stop format help integrationtest lint proto setup-test-env sqlc teardown-test-env test vet
 
 GOLANGCI_LINT ?= $(shell \
 	echo "docker run --rm -v $$(pwd):/app -w /app golangci/golangci-lint:v2.9.0 golangci-lint"; \
@@ -52,15 +52,13 @@ lint:
 	@echo "Linting code..."
 	@$(GOLANGCI_LINT) run --fix --tests=false
 
-## test: runs all tests
+## test: runs unit tests (excludes test/e2e)
 test:
-	@echo "Running all tests..."
-	@go test -v -race --count=1 ./...
+	@echo "Running unit tests..."
+	@go test -v -race --count=1 $(shell go list ./... | grep -v /test/e2e)
 
-## setup-test-env: start nigiri + arkd stack for integration tests
-setup-test-env:
-	@echo "Starting nigiri..."
-	@nigiri start
+## docker-run: start arkd stack and fund wallet (assumes nigiri is running)
+docker-run:
 	@echo "Starting arkd stack..."
 	@docker compose -f test/docker-compose.yml up -d --build
 	@echo "Waiting for services..."
@@ -73,17 +71,27 @@ setup-test-env:
 	@sleep 5
 	@echo "Test environment ready."
 
-## teardown-test-env: stop arkd stack + nigiri
-teardown-test-env:
+## docker-stop: stop arkd stack
+docker-stop:
 	@echo "Stopping arkd stack..."
 	@docker compose -f test/docker-compose.yml down -v --remove-orphans
+
+## setup-test-env: start nigiri + arkd stack for integration tests
+setup-test-env:
+	@echo "Starting nigiri..."
+	@nigiri start
+	@$(MAKE) docker-run
+
+## teardown-test-env: stop arkd stack + nigiri
+teardown-test-env:
+	@$(MAKE) docker-stop
 	@echo "Stopping nigiri..."
 	@nigiri stop --delete
 
 ## integrationtest: run integration tests (requires setup-test-env)
 integrationtest:
 	@echo "Running integration tests..."
-	@go test -v -count=1 -timeout=10m -race -p=1 -tags e2e ./test/e2e/...
+	@go test -v -count=1 -timeout=10m -race -p=1 ./test/e2e/...
 
 ## vet: code analysis
 vet:

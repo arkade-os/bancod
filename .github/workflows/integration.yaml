@@ -1,0 +1,47 @@
+name: ci_integration
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  test:
+    name: integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '>=1.26.1'
+          cache: true
+
+      - name: Run Nigiri
+        uses: vulpemventures/nigiri-github-action@v1
+
+      - name: Run arkd stack
+        run: make docker-run
+
+      - name: Run integration tests
+        run: make integrationtest
+
+      - name: Capture arkd logs
+        if: failure()
+        run: |
+          echo "=== arkd logs ==="
+          docker logs bancod-arkd || true
+          echo "=== arkd-wallet logs ==="
+          docker logs bancod-arkd-wallet || true
+          echo "=== nbxplorer logs ==="
+          docker logs bancod-nbxplorer || true
+          echo "=== introspector logs ==="
+          docker logs bancod-introspector || true
+
+      - name: Tear down
+        if: always()
+        run: make docker-stop

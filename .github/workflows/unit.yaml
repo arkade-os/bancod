@@ -1,4 +1,4 @@
-name: ci
+name: ci_unit
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: lint & test
+    name: unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,7 +33,7 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -v -race --count=1 ./...
+        run: make test
 
       - name: Security Check
         uses: securego/gosec@v2.22.2
