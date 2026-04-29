@@ -83,7 +83,7 @@ teardown-test-env:
 ## integrationtest: run integration tests (requires setup-test-env)
 integrationtest:
 	@echo "Running integration tests..."
-	@go test -v -count=1 -timeout=10m -race -p=1 ./test/e2e/...
+	@go test -v -count=1 -timeout=10m -race -p=1 -tags e2e ./test/e2e/...
 
 ## vet: code analysis
 vet:
