@@ -1,4 +1,4 @@
-package solver
+package banco
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type FulfillmentEvent struct {
 	Timestamp     time.Time
 }
 
-// FulfillmentListener is notified when the solver successfully fulfills an offer.
+// FulfillmentListener is notified when the banco plugin successfully fulfills an offer.
 // Implementations should return quickly; any persistence or network I/O should
 // be non-blocking or delegated to a background goroutine.
 type FulfillmentListener interface {

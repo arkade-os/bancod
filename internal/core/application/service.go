@@ -2,43 +2,64 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/arkade-os/arkd/pkg/client-lib/indexer"
 	arksdk "github.com/arkade-os/go-sdk"
+	"github.com/sirupsen/logrus"
 
 	"github.com/arkade-os/bancod/internal/core/ports"
+	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/solver"
 )
 
 const btcDecimals = 8
 
-// TakerService is the application-level service that manages the solver
-// and provides CRUD for trading pairs plus wallet operations.
+// Status reports whether the solver run goroutine is currently active.
+type Status struct {
+	Running bool
+}
+
+// TakerService is the application-level service that owns the solver run
+// loop and provides CRUD for trading pairs plus wallet operations.
 type TakerService struct {
 	solver    *solver.Solver
 	pairRepo  ports.PairRepository
 	tradeRepo ports.TradeRepository
 	arkClient arksdk.ArkClient
 	indexer   indexer.Indexer
+	log       logrus.FieldLogger
+
+	cancel  context.CancelFunc
+	done    chan struct{}
+	mu      sync.RWMutex
+	running bool
 }
 
-// NewTakerService creates a new TakerService.
+// NewTakerService creates a new TakerService. The caller is responsible
+// for constructing the solver from a banco.Plugin.
 func NewTakerService(
 	s *solver.Solver,
 	pairRepo ports.PairRepository,
 	tradeRepo ports.TradeRepository,
 	arkClient arksdk.ArkClient,
 	idx indexer.Indexer,
+	log logrus.FieldLogger,
 ) *TakerService {
+	if log == nil {
+		log = logrus.StandardLogger()
+	}
 	return &TakerService{
 		solver:    s,
 		pairRepo:  pairRepo,
 		tradeRepo: tradeRepo,
 		arkClient: arkClient,
 		indexer:   idx,
+		log:       log,
 	}
 }
 
@@ -51,23 +72,46 @@ func (svc *TakerService) ListTrades(ctx context.Context, limit int) ([]ports.Tra
 	return svc.tradeRepo.List(ctx, limit)
 }
 
-// Start starts the solver.
+// Start spawns the solver run goroutine, subscribed to the arkd tx stream.
 func (svc *TakerService) Start() {
-	svc.solver.Start()
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.cancel = cancel
+	svc.done = make(chan struct{})
+
+	txs := banco.SubscribeArkd(ctx, svc.arkClient, svc.log)
+	svc.setRunning(true)
+	go func() {
+		defer close(svc.done)
+		defer svc.setRunning(false)
+		if err := svc.solver.Run(ctx, txs); err != nil && !errors.Is(err, context.Canceled) {
+			svc.log.WithError(err).Error("solver run exited")
+		}
+	}()
 }
 
-// Stop stops the solver.
+// Stop signals the run goroutine to exit and waits for it.
 func (svc *TakerService) Stop() {
-	svc.solver.Stop()
+	if svc.cancel != nil {
+		svc.cancel()
+		<-svc.done
+	}
 }
 
-// Status returns the current solver status.
-func (svc *TakerService) Status() solver.Status {
-	return svc.solver.Status()
+// Status reports whether Run is active.
+func (svc *TakerService) Status() Status {
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
+	return Status{Running: svc.running}
+}
+
+func (svc *TakerService) setRunning(v bool) {
+	svc.mu.Lock()
+	svc.running = v
+	svc.mu.Unlock()
 }
 
 // AddPair validates, resolves decimals from the indexer, and adds a new pair.
-func (svc *TakerService) AddPair(ctx context.Context, pair solver.Pair) error {
+func (svc *TakerService) AddPair(ctx context.Context, pair banco.Pair) error {
 	resolved, err := svc.resolveDecimals(ctx, pair)
 	if err != nil {
 		return err
@@ -79,7 +123,7 @@ func (svc *TakerService) AddPair(ctx context.Context, pair solver.Pair) error {
 }
 
 // UpdatePair validates, resolves decimals from the indexer, and updates an existing pair.
-func (svc *TakerService) UpdatePair(ctx context.Context, pair solver.Pair) error {
+func (svc *TakerService) UpdatePair(ctx context.Context, pair banco.Pair) error {
 	resolved, err := svc.resolveDecimals(ctx, pair)
 	if err != nil {
 		return err
@@ -99,7 +143,7 @@ func (svc *TakerService) RemovePair(ctx context.Context, pairName string) error 
 }
 
 // ListPairs returns all configured trading pairs.
-func (svc *TakerService) ListPairs(ctx context.Context) ([]solver.Pair, error) {
+func (svc *TakerService) ListPairs(ctx context.Context) ([]banco.Pair, error) {
 	return svc.pairRepo.List(ctx)
 }
 
@@ -156,7 +200,7 @@ func (svc *TakerService) GetAddress(ctx context.Context) (*Address, error) {
 // resolveDecimals parses the pair and fills BaseDecimals/QuoteDecimals using
 // the indexer. BTC always resolves to 8; any other side is treated as a hex
 // asset ID and looked up via indexer.GetAsset.
-func (svc *TakerService) resolveDecimals(ctx context.Context, pair solver.Pair) (solver.Pair, error) {
+func (svc *TakerService) resolveDecimals(ctx context.Context, pair banco.Pair) (banco.Pair, error) {
 	base, quote, ok := splitPair(pair.Pair)
 	if !ok {
 		return pair, fmt.Errorf("pair must be in format 'base/quote'")
@@ -214,7 +258,7 @@ func splitPair(name string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
-func validatePair(pair solver.Pair) error {
+func validatePair(pair banco.Pair) error {
 	if pair.Pair == "" {
 		return fmt.Errorf("pair name is required")
 	}

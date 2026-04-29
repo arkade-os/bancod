@@ -108,6 +108,11 @@ func FulfillOffer(
 	takerVtxos := make([]clientTypes.VtxoWithTapTree, 0, len(spendableVtxos))
 	for _, addr := range offchainAddrs {
 		for _, v := range spendableVtxos {
+			if v.IsRecoverable() {
+				// ignore recoverable vtxos
+				// TODO: fullfill in batch ?
+				continue
+			}
 			vtxoAddr, err := v.Address(cfg.SignerPubKey, cfg.Network)
 			if err != nil {
 				continue

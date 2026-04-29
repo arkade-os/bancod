@@ -1,4 +1,4 @@
-package solver
+package banco
 
 import (
 	"context"
@@ -59,4 +59,9 @@ func (c *priceCache) get(ctx context.Context, feedURL string) (float64, error) {
 	c.mu.Unlock()
 
 	return price, nil
+}
+
+// validatePrice ensures the offer price is within 1% margin of the feed price.
+func validatePrice(offerPrice, feedPrice float64) bool {
+	return offerPrice >= feedPrice*0.99 && offerPrice <= feedPrice*1.01
 }

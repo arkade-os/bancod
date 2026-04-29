@@ -21,6 +21,7 @@ import (
 	"github.com/arkade-os/bancod/internal/core/application"
 	"github.com/arkade-os/bancod/internal/core/ports"
 	sqlitedb "github.com/arkade-os/bancod/internal/infrastructure/db/sqlite"
+	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/solver"
 )
 
@@ -84,15 +85,16 @@ func TestMain(m *testing.M) {
 	introClient := introclient.NewGRPCClient(introConn)
 
 	// Build solver
-	s := solver.New(solver.Config{
+	plugin := banco.NewPlugin(banco.Config{
 		SolverClient:    takerClient,
 		Introspector:    introClient,
 		PairsRepository: pairRepo,
 		PriceFeed:       &mockPriceFeed{},
 		Log:             log.StandardLogger(),
 	})
+	s := solver.New(plugin)
 
-	takerSvc = application.NewTakerService(s, pairRepo, tradeRepo, takerClient, takerClient.Indexer())
+	takerSvc = application.NewTakerService(s, pairRepo, tradeRepo, takerClient, takerClient.Indexer(), log.StandardLogger())
 	takerSvc.Start()
 	defer takerSvc.Stop()
 

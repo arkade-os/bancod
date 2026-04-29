@@ -9,8 +9,8 @@ import (
 	clientTypes "github.com/arkade-os/arkd/pkg/client-lib/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/contract"
-	"github.com/arkade-os/bancod/pkg/solver"
 )
 
 const mockPriceFeedURL = "http://mock-price-feed"
@@ -36,7 +36,7 @@ func TestBancoAssetToBTC(t *testing.T) {
 	// Configure taker pair: asset/"" (quote is empty for BTC want).
 	// We add directly via pairRepo because takerSvc.AddPair validates
 	// that both base and quote are non-empty.
-	pair := solver.Pair{
+	pair := banco.Pair{
 		Pair:          assetID + "/",
 		MinAmount:     1,
 		MaxAmount:     100000000,
@@ -120,7 +120,7 @@ func TestBancoBTCToAsset(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	// Configure pair: BTC/asset with both decimals=0
-	pair := solver.Pair{
+	pair := banco.Pair{
 		Pair:          "BTC/" + assetID,
 		MinAmount:     1,
 		MaxAmount:     100000000,
@@ -128,9 +128,9 @@ func TestBancoBTCToAsset(t *testing.T) {
 		QuoteDecimals: 0,
 		PriceFeed:     mockPriceFeedURL,
 	}
-	err = takerSvc.AddPair(ctx, pair)
+	err = pairRepo.Add(ctx, pair)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = takerSvc.RemovePair(ctx, pair.Pair) })
+	t.Cleanup(func() { _ = pairRepo.Remove(ctx, pair.Pair) })
 
 	// Maker creates offer: deposit BTC, want 500 units of asset
 	maker := setupArkClient(t)
@@ -208,7 +208,7 @@ func TestBancoAssetToAsset(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	// Configure pair: assetA/assetB
-	pair := solver.Pair{
+	pair := banco.Pair{
 		Pair:          assetA + "/" + assetB,
 		MinAmount:     1,
 		MaxAmount:     100000000,
@@ -216,9 +216,9 @@ func TestBancoAssetToAsset(t *testing.T) {
 		QuoteDecimals: 0,
 		PriceFeed:     mockPriceFeedURL,
 	}
-	err = takerSvc.AddPair(ctx, pair)
+	err = pairRepo.Add(ctx, pair)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = takerSvc.RemovePair(ctx, pair.Pair) })
+	t.Cleanup(func() { _ = pairRepo.Remove(ctx, pair.Pair) })
 
 	// Maker creates offer: deposit assetA, want assetB
 	intro := newIntroClient(t)

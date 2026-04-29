@@ -10,7 +10,7 @@ import (
 	bancov1 "github.com/arkade-os/bancod/api-spec/protobuf/gen/go/bancod/v1"
 	"github.com/arkade-os/bancod/internal/core/application"
 	"github.com/arkade-os/bancod/internal/core/ports"
-	"github.com/arkade-os/bancod/pkg/solver"
+	"github.com/arkade-os/bancod/pkg/banco"
 )
 
 type handler struct {
@@ -137,8 +137,8 @@ func (h *handler) ListTrades(
 	return &bancov1.ListTradesResponse{Trades: out}, nil
 }
 
-func protoToDomain(p *bancov1.PairInfo) solver.Pair {
-	return solver.Pair{
+func protoToDomain(p *bancov1.PairInfo) banco.Pair {
+	return banco.Pair{
 		Pair:        p.Pair,
 		MinAmount:   p.MinAmount,
 		MaxAmount:   p.MaxAmount,
@@ -147,7 +147,7 @@ func protoToDomain(p *bancov1.PairInfo) solver.Pair {
 	}
 }
 
-func domainToProto(p solver.Pair) *bancov1.PairInfo {
+func domainToProto(p banco.Pair) *bancov1.PairInfo {
 	return &bancov1.PairInfo{
 		Pair:        p.Pair,
 		MinAmount:   p.MinAmount,

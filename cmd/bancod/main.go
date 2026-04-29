@@ -17,6 +17,7 @@ import (
 	sqlitedb "github.com/arkade-os/bancod/internal/infrastructure/db/sqlite"
 	"github.com/arkade-os/bancod/internal/infrastructure/pricefeed"
 	grpcservice "github.com/arkade-os/bancod/internal/interface/grpc"
+	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/solver"
 )
 
@@ -71,7 +72,7 @@ func main() {
 	defer arkClient.Stop()
 
 	tradeListener := application.NewTradeListener(tradeRepo, log)
-	s := solver.New(solver.Config{
+	plugin := banco.NewPlugin(banco.Config{
 		SolverClient:    arkClient,
 		Introspector:    introspector,
 		PairsRepository: pairRepo,
@@ -79,8 +80,9 @@ func main() {
 		Listener:        tradeListener,
 		Log:             log,
 	})
+	s := solver.New(plugin)
 
-	takerSvc := application.NewTakerService(s, pairRepo, tradeRepo, arkClient, arkClient.Indexer())
+	takerSvc := application.NewTakerService(s, pairRepo, tradeRepo, arkClient, arkClient.Indexer(), log)
 
 	takerSvc.Start()
 

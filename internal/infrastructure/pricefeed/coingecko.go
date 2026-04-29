@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// CoinGecko implements solver.PriceFeed by fetching prices from a URL
+// CoinGecko implements banco.PriceFeed by fetching prices from a URL
 // that returns a JSON object with a nested price value.
 type CoinGecko struct {
 	client *http.Client

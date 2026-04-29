@@ -6,7 +6,7 @@ import (
 
 	"github.com/arkade-os/bancod/internal/core/ports"
 	"github.com/arkade-os/bancod/internal/infrastructure/db/sqlite/sqlc"
-	"github.com/arkade-os/bancod/pkg/solver"
+	"github.com/arkade-os/bancod/pkg/banco"
 )
 
 // PairRepository implements ports.PairRepository backed by SQLite.
@@ -22,13 +22,13 @@ func NewPairRepository(db *sql.DB) *PairRepository {
 }
 
 // List returns all configured trading pairs.
-func (r *PairRepository) List(ctx context.Context) ([]solver.Pair, error) {
+func (r *PairRepository) List(ctx context.Context) ([]banco.Pair, error) {
 	rows, err := r.queries.ListPairs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	pairs := make([]solver.Pair, 0, len(rows))
+	pairs := make([]banco.Pair, 0, len(rows))
 	for _, row := range rows {
 		pairs = append(pairs, toDomainPair(row))
 	}
@@ -36,7 +36,7 @@ func (r *PairRepository) List(ctx context.Context) ([]solver.Pair, error) {
 }
 
 // Add inserts a new trading pair.
-func (r *PairRepository) Add(ctx context.Context, pair solver.Pair) error {
+func (r *PairRepository) Add(ctx context.Context, pair banco.Pair) error {
 	return r.queries.InsertPair(ctx, sqlc.InsertPairParams{
 		Pair:          pair.Pair,
 		MinAmount:     int64(pair.MinAmount),
@@ -50,7 +50,7 @@ func (r *PairRepository) Add(ctx context.Context, pair solver.Pair) error {
 
 // Update modifies an existing trading pair.
 // Returns ports.ErrPairNotFound if no row matched.
-func (r *PairRepository) Update(ctx context.Context, pair solver.Pair) error {
+func (r *PairRepository) Update(ctx context.Context, pair banco.Pair) error {
 	rows, err := r.queries.UpdatePair(ctx, sqlc.UpdatePairParams{
 		Pair:          pair.Pair,
 		MinAmount:     int64(pair.MinAmount),
@@ -74,8 +74,8 @@ func (r *PairRepository) Remove(ctx context.Context, pairName string) error {
 	return r.queries.DeletePair(ctx, pairName)
 }
 
-func toDomainPair(row sqlc.BancoPair) solver.Pair {
-	return solver.Pair{
+func toDomainPair(row sqlc.BancoPair) banco.Pair {
+	return banco.Pair{
 		Pair:          row.Pair,
 		MinAmount:     uint64(row.MinAmount),
 		MaxAmount:     uint64(row.MaxAmount),

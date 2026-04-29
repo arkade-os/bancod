@@ -1,4 +1,4 @@
-package solver
+package banco
 
 import (
 	"testing"
@@ -31,14 +31,14 @@ func testAssetId(t *testing.T) *asset.AssetId {
 	return id
 }
 
-func testKeyPairSolver(t *testing.T) (*btcec.PrivateKey, *btcec.PublicKey) {
+func testKeyPair(t *testing.T) (*btcec.PrivateKey, *btcec.PublicKey) {
 	t.Helper()
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
 	return priv, priv.PubKey()
 }
 
-func testP2TRScriptSolver(t *testing.T, pub *btcec.PublicKey) []byte {
+func testP2TRScript(t *testing.T, pub *btcec.PublicKey) []byte {
 	t.Helper()
 	s, err := script.P2TRScript(pub)
 	require.NoError(t, err)
@@ -75,11 +75,11 @@ func buildTestTxWithOffer(t *testing.T, offer *contract.Offer) *wire.MsgTx {
 // buildMinimalOffer builds a valid contract.Offer with required fields populated.
 func buildMinimalOffer(t *testing.T) *contract.Offer {
 	t.Helper()
-	_, makerPub := testKeyPairSolver(t)
-	_, introPub := testKeyPairSolver(t)
+	_, makerPub := testKeyPair(t)
+	_, introPub := testKeyPair(t)
 
-	makerPkScript := testP2TRScriptSolver(t, makerPub)
-	swapPkScript := testP2TRScriptSolver(t, makerPub)
+	makerPkScript := testP2TRScript(t, makerPub)
+	swapPkScript := testP2TRScript(t, makerPub)
 
 	return &contract.Offer{
 		SwapPkScript:       swapPkScript,

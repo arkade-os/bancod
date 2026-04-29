@@ -15,6 +15,7 @@ import (
 	bancov1 "github.com/arkade-os/bancod/api-spec/protobuf/gen/go/bancod/v1"
 	"github.com/arkade-os/bancod/internal/core/application"
 	sqlitedb "github.com/arkade-os/bancod/internal/infrastructure/db/sqlite"
+	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/solver"
 )
 
@@ -76,9 +77,10 @@ func setupHandler(t *testing.T) bancov1.BancoServiceServer {
 
 	pairRepo := sqlitedb.NewPairRepository(db)
 
-	s := solver.New(solver.Config{
+	plugin := banco.NewPlugin(banco.Config{
 		PriceCacheTTL: 5 * time.Minute,
 	})
+	s := solver.New(plugin)
 
 	idx := &mockIndexer{decimals: map[string]string{
 		"USDT": "6",
@@ -86,7 +88,7 @@ func setupHandler(t *testing.T) bancov1.BancoServiceServer {
 		"LTC":  "8",
 	}}
 	tradeRepo := sqlitedb.NewTradeRepository(db)
-	svc := application.NewTakerService(s, pairRepo, tradeRepo, &mockArkClient{}, idx)
+	svc := application.NewTakerService(s, pairRepo, tradeRepo, &mockArkClient{}, idx, nil)
 
 	return newHandler(svc)
 }
