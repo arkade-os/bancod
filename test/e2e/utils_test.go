@@ -14,6 +14,11 @@ import (
 	"time"
 
 	introclient "github.com/ArkLabsHQ/introspector/pkg/client"
+	"reflect"
+
+	"github.com/arkade-os/arkd/pkg/ark-lib/asset"
+	"github.com/arkade-os/arkd/pkg/ark-lib/extension"
+	clientlib "github.com/arkade-os/arkd/pkg/client-lib"
 	clientTypes "github.com/arkade-os/arkd/pkg/client-lib/types"
 	arksdk "github.com/arkade-os/go-sdk"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -124,6 +129,34 @@ func setupArkClient(t *testing.T) arksdk.ArkClient {
 	return arkClient
 }
 
+// sendOffChainWithExtension funds an address with a receiver while attaching
+// an arbitrary extension packet to the ark transaction's OP_RETURN. go-sdk's
+// SendOffChain wrapper does not pass options through to the underlying
+// client-lib, so we extract the embedded client.ArkClient and call it
+// directly. Reflection is used because the wrapping struct is unexported.
+func sendOffChainWithExtension(
+	t *testing.T,
+	c arksdk.ArkClient,
+	receiver clientTypes.Receiver,
+	pkt extension.Packet,
+) {
+	t.Helper()
+	v := reflect.ValueOf(c)
+	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+		v = v.Elem()
+	}
+	field := v.FieldByName("ArkClient")
+	require.True(t, field.IsValid(), "go-sdk arkClient.ArkClient field not found")
+	inner, ok := field.Interface().(clientlib.ArkClient)
+	require.True(t, ok, "embedded ArkClient does not implement clientlib.ArkClient")
+	_, err := inner.SendOffChain(
+		t.Context(),
+		[]clientTypes.Receiver{receiver},
+		clientlib.WithExtraPacket(pkt),
+	)
+	require.NoError(t, err)
+}
+
 func newIntroClient(t *testing.T) introclient.TransportClient {
 	t.Helper()
 	conn, err := grpc.NewClient(introspectorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -133,7 +166,11 @@ func newIntroClient(t *testing.T) introclient.TransportClient {
 
 func issueAsset(t *testing.T, client arksdk.ArkClient, supply uint64) string {
 	t.Helper()
-	_, assetIds, err := client.IssueAsset(t.Context(), supply, nil, nil)
+	// bancod's pair validation looks up "decimals" metadata via the indexer,
+	// so every test asset must publish it (zero-decimal assets are fine).
+	decimalsMd, err := asset.NewMetadata("decimals", "0")
+	require.NoError(t, err)
+	_, assetIds, err := client.IssueAsset(t.Context(), supply, nil, []asset.Metadata{*decimalsMd})
 	require.NoError(t, err)
 	require.Len(t, assetIds, 1)
 	return assetIds[0].String()

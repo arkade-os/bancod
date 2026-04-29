@@ -41,9 +41,7 @@ services:
 
   arkd-wallet:
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: arkdwallet.Dockerfile
+    image: ghcr.io/arkade-os/arkd-wallet:v0.9.3
     container_name: bancod-arkd-wallet
     depends_on:
       - nbxplorer
@@ -59,9 +57,7 @@ services:
         target: /app/data
 
   arkd:
-    build:
-      context: .
-      dockerfile: arkd.Dockerfile
+    image: ghcr.io/arkade-os/arkd:v0.9.3
     container_name: bancod-arkd
     restart: unless-stopped
     depends_on:
@@ -72,10 +68,10 @@ services:
     environment:
       - ARKD_LOG_LEVEL=5
       - ARKD_NO_MACAROONS=true
-      - ARKD_VTXO_TREE_EXPIRY=512
-      - ARKD_UNILATERAL_EXIT_DELAY=512
-      - ARKD_PUBLIC_UNILATERAL_EXIT_DELAY=512
-      - ARKD_BOARDING_EXIT_DELAY=2048
+      - ARKD_VTXO_TREE_EXPIRY=40
+      - ARKD_UNILATERAL_EXIT_DELAY=20
+      - ARKD_PUBLIC_UNILATERAL_EXIT_DELAY=20
+      - ARKD_BOARDING_EXIT_DELAY=30
       - ARKD_CHECKPOINT_EXIT_DELAY=10
       - ARKD_WALLET_ADDR=bancod-arkd-wallet:6060
       - ARKD_ESPLORA_URL=http://chopsticks:3000
@@ -89,7 +85,7 @@ services:
         target: /app/data
 
   introspector:
-    image: ghcr.io/arklabshq/introspector:v0.0.1-rc.3
+    image: ghcr.io/arklabshq/introspector:v0.0.1
     container_name: bancod-introspector
     restart: unless-stopped
     depends_on:
@@ -100,6 +96,7 @@ services:
       - INTROSPECTOR_SECRET_KEY=f40f6e7a5cf262f4093d4605b8f40cbaf9da9e59bf32f24bb27a4ffc74f71eab
       - INTROSPECTOR_NO_TLS=true
       - INTROSPECTOR_LOG_LEVEL=5
+      - INTROSPECTOR_ARKD_URL=bancod-arkd:7070
     volumes:
       - type: tmpfs
         target: /app/data

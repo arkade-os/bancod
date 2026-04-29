@@ -7,7 +7,6 @@ import (
 
 	"github.com/arkade-os/arkd/pkg/ark-lib/asset"
 	clientTypes "github.com/arkade-os/arkd/pkg/client-lib/types"
-	arksdk "github.com/arkade-os/go-sdk"
 	"github.com/stretchr/testify/require"
 
 	"github.com/arkade-os/bancod/pkg/contract"
@@ -68,12 +67,11 @@ func TestBancoAssetToBTC(t *testing.T) {
 		_, incomingErr = maker.NotifyIncomingFunds(ctx, offerResult.SwapAddress)
 	}()
 
-	_, err = maker.SendOffChain(ctx, []clientTypes.Receiver{{
+	sendOffChainWithExtension(t, maker, clientTypes.Receiver{
 		To:     offerResult.SwapAddress,
 		Amount: 450,
 		Assets: []clientTypes.Asset{{AssetId: assetID, Amount: 500}},
-	}}, arksdk.WithExtension(offerResult.Packet))
-	require.NoError(t, err)
+	}, offerResult.Packet)
 	wg.Wait()
 	require.NoError(t, incomingErr)
 
@@ -157,11 +155,10 @@ func TestBancoBTCToAsset(t *testing.T) {
 		_, incomingErr = maker.NotifyIncomingFunds(ctx, offerResult.SwapAddress)
 	}()
 
-	_, err = maker.SendOffChain(ctx, []clientTypes.Receiver{{
+	sendOffChainWithExtension(t, maker, clientTypes.Receiver{
 		To:     offerResult.SwapAddress,
 		Amount: 500,
-	}}, arksdk.WithExtension(offerResult.Packet))
-	require.NoError(t, err)
+	}, offerResult.Packet)
 	wg.Wait()
 	require.NoError(t, incomingErr)
 
@@ -242,12 +239,11 @@ func TestBancoAssetToAsset(t *testing.T) {
 		_, incomingErr = maker.NotifyIncomingFunds(ctx, offerResult.SwapAddress)
 	}()
 
-	_, err = maker.SendOffChain(ctx, []clientTypes.Receiver{{
+	sendOffChainWithExtension(t, maker, clientTypes.Receiver{
 		To:     offerResult.SwapAddress,
 		Amount: 450,
 		Assets: []clientTypes.Asset{{AssetId: assetA, Amount: 500}},
-	}}, arksdk.WithExtension(offerResult.Packet))
-	require.NoError(t, err)
+	}, offerResult.Packet)
 	wg.Wait()
 	require.NoError(t, incomingErr)
 

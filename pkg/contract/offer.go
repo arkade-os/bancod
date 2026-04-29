@@ -263,35 +263,32 @@ func (o *Offer) FulfillScript() ([]byte, error) {
 	}
 
 	if o.WantAsset == nil {
-		// BTC fulfill: value check + scriptPubKey check
+		// BTC fulfill: value check + scriptPubKey check.
+		// OP_INSPECTOUTPUTVALUE pushes a BigNum; AddInt64 pushes a minimally-
+		// encoded sign-magnitude LE value with the same on-stack representation,
+		// so unified OP_GREATERTHANOREQUAL compares them directly.
 		b := txscript.NewScriptBuilder()
 		b.AddOp(txscript.OP_0)
 		b.AddOp(script.OP_INSPECTOUTPUTVALUE)
 		b.AddInt64(int64(o.WantAmount))
-		b.AddOp(arkade.OP_SCRIPTNUMTOLE64)
-		b.AddOp(arkade.OP_GREATERTHANOREQUAL64)
+		b.AddOp(txscript.OP_GREATERTHANOREQUAL)
 		b.AddOp(txscript.OP_VERIFY)
 		scriptPubKeyCheck(b)
 		return b.Script()
 	}
 
-	// Asset fulfill: INSPECTOUTASSETLOOKUP + value check + scriptPubKey check
+	// Asset fulfill: INSPECTOUTASSETLOOKUP + value check + scriptPubKey check.
 	// Stack for INSPECTOUTASSETLOOKUP (top-to-bottom): lookup_index, txid, output_index.
 	// For full fill, the taker creates a single asset group at output 0, so lookup_index=0.
+	// Lookup result (top-to-bottom): success_flag (1=found, 0=miss), amount (BigNum).
 	b := txscript.NewScriptBuilder()
 	b.AddOp(txscript.OP_0) // output index 0
 	b.AddData(o.WantAsset.Txid[:])
 	b.AddOp(txscript.OP_0) // asset group lookup index 0
 	b.AddOp(arkade.OP_INSPECTOUTASSETLOOKUP)
-	b.AddOp(txscript.OP_DUP)
-	b.AddOp(txscript.OP_1NEGATE)
-	b.AddOp(txscript.OP_EQUAL)
-	b.AddOp(txscript.OP_NOT)
-	b.AddOp(txscript.OP_VERIFY)
-	b.AddOp(arkade.OP_SCRIPTNUMTOLE64)
+	b.AddOp(txscript.OP_VERIFY) // success flag must be 1
 	b.AddInt64(int64(o.WantAmount))
-	b.AddOp(arkade.OP_SCRIPTNUMTOLE64)
-	b.AddOp(arkade.OP_GREATERTHANOREQUAL64)
+	b.AddOp(txscript.OP_GREATERTHANOREQUAL)
 	b.AddOp(txscript.OP_VERIFY)
 	scriptPubKeyCheck(b)
 	return b.Script()

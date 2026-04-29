@@ -1,13 +1,13 @@
 module github.com/arkade-os/bancod
 
-go 1.26.1
+go 1.26.2
 
 require (
-	github.com/ArkLabsHQ/introspector/pkg/arkade v0.0.0-20260326164719-cc96254098bb
-	github.com/ArkLabsHQ/introspector/pkg/client v0.0.0-20260326164719-cc96254098bb
-	github.com/arkade-os/arkd/pkg/ark-lib v0.8.1-0.20260409081258-41d7735b56d3
-	github.com/arkade-os/arkd/pkg/client-lib v0.0.0-20260408115656-3ab1c9e46f98
-	github.com/arkade-os/go-sdk v0.9.2-0.20260409094135-d21a34a57e64
+	github.com/ArkLabsHQ/introspector/pkg/arkade v0.0.0-20260427094156-b60e40adcde1
+	github.com/ArkLabsHQ/introspector/pkg/client v0.0.0-20260427094156-b60e40adcde1
+	github.com/arkade-os/arkd/pkg/ark-lib v0.8.1-0.20260424100525-a2d86c81759d
+	github.com/arkade-os/arkd/pkg/client-lib v0.0.0-20260424100525-a2d86c81759d
+	github.com/arkade-os/go-sdk v0.9.2-0.20260424102609-2d035b640596
 	github.com/btcsuite/btcd v0.24.3-0.20250318170759-4f4ea81776d6
 	github.com/btcsuite/btcd/btcec/v2 v2.3.6
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.9
@@ -18,7 +18,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
-	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
+	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.33.1
@@ -26,13 +26,13 @@ require (
 
 require (
 	cel.dev/expr v0.25.1 // indirect
-	github.com/ArkLabsHQ/introspector/api-spec v0.0.0-20260326164719-cc96254098bb // indirect
+	github.com/ArkLabsHQ/introspector/api-spec v0.0.0-20260427094156-b60e40adcde1 // indirect
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/aead/siphash v1.0.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
-	github.com/arkade-os/arkd/api-spec v0.0.0-20260323091657-eeb0baef6937 // indirect
-	github.com/arkade-os/arkd/pkg/errors v0.0.0-20260303153651-8615412e4dea // indirect
+	github.com/arkade-os/arkd/api-spec v0.0.0-20260420150126-77b6c3aba563 // indirect
+	github.com/arkade-os/arkd/pkg/errors v0.0.0-20260420150126-77b6c3aba563 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/btcsuite/btclog v0.0.0-20241003133417-09c4e92e319c // indirect
 	github.com/btcsuite/btclog/v2 v2.0.1-0.20250602222548-9967d19bb084 // indirect
@@ -88,15 +88,15 @@ require (
 	github.com/vulpemventures/go-bip32 v0.0.0-20200624192635-867c159da4d7 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel v1.40.0 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect

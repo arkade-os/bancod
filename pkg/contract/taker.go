@@ -289,119 +289,49 @@ func FulfillOffer(
 		return nil, fmt.Errorf("failed to build offchain txs: %w", err)
 	}
 
-	signedArkTxB64, err := arkTx.B64Encode()
+	arkTxB64, err := arkTx.B64Encode()
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode ark tx: %w", err)
 	}
-	signedArkTxB64, err = arkClient.SignTransaction(ctx, signedArkTxB64)
+	signedArkTxB64, err := arkClient.SignTransaction(ctx, arkTxB64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign ark tx: %w", err)
 	}
 
+	// Pre-sign every checkpoint with the taker key. The introspector requires
+	// each checkpoint to already carry its non-arkd signatures before it forwards
+	// the bundle to arkd (verifyNonArkdCheckpointSignatures). The swap VTXO
+	// checkpoint has no taker key in its closure so SignTransaction is a no-op
+	// there; the introspector will add its own signature in its SubmitTx.
 	checkpointB64s := make([]string, 0, len(checkpoints))
 	for _, cp := range checkpoints {
 		cpB64, err := cp.B64Encode()
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode checkpoint: %w", err)
 		}
-		checkpointB64s = append(checkpointB64s, cpB64)
+		signedCpB64, err := arkClient.SignTransaction(ctx, cpB64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to taker-sign checkpoint: %w", err)
+		}
+		checkpointB64s = append(checkpointB64s, signedCpB64)
 	}
 
-	// Step 1: Introspector signs ark tx + checkpoints (single call).
-	introSignedTx, introSignedCheckpoints, err := introClient.SubmitTx(ctx, signedArkTxB64, checkpointB64s)
+	// Hand the pre-signed bundle to the introspector. Because bancod's swap
+	// fulfill closure makes the introspector tweaked key the last non-arkd
+	// signer, the introspector takes on the finalizer role: it forwards the
+	// bundle to arkd, merges arkd's checkpoint signatures, calls FinalizeTx,
+	// and returns the finalized ark tx + finalized checkpoints.
+	finalArkTxB64, _, err := introClient.SubmitTx(ctx, signedArkTxB64, checkpointB64s)
 	if err != nil {
 		return nil, fmt.Errorf("introspector submission failed: %w", err)
 	}
 
-	// Step 2: Send intro-signed ark tx + checkpoints to arkd.
-	arkTxid, _, serverSignedCheckpoints, err := arkClient.Client().SubmitTx(
-		ctx, introSignedTx, introSignedCheckpoints,
-	)
+	finalArkPtx, err := psbt.NewFromRawBytes(strings.NewReader(finalArkTxB64), true)
 	if err != nil {
-		return nil, fmt.Errorf("ark server submission failed: %w", err)
+		return nil, fmt.Errorf("failed to decode finalized ark tx: %w", err)
 	}
-
-	// Debug: compare local vs server checkpoint txids to check mismatch
-	for i := range serverSignedCheckpoints {
-		localCp, _ := psbt.NewFromRawBytes(strings.NewReader(introSignedCheckpoints[i]), true)
-		serverCp, _ := psbt.NewFromRawBytes(strings.NewReader(serverSignedCheckpoints[i]), true)
-		if localCp != nil && serverCp != nil {
-			log.WithFields(log.Fields{
-				"index":      i,
-				"localTxid":  localCp.UnsignedTx.TxHash().String(),
-				"serverTxid": serverCp.UnsignedTx.TxHash().String(),
-				"match":      localCp.UnsignedTx.TxHash() == serverCp.UnsignedTx.TxHash(),
-			}).Debug("taker: checkpoint comparison")
-		}
-	}
-
-	// Index introspector-signed checkpoints by txid for matching.
-	// Only include checkpoints where the introspector actually added a signature
-	// (arkd may return checkpoints in a different order than fulmine built them).
-	introCheckpointsByTxid := make(map[string]string)
-	for _, cpB64 := range introSignedCheckpoints {
-		cp, err := psbt.NewFromRawBytes(strings.NewReader(cpB64), true)
-		if err != nil {
-			continue
-		}
-		// Only consider this checkpoint "intro-signed" if it has tapscript sigs
-		hasSigs := false
-		for _, inp := range cp.Inputs {
-			if len(inp.TaprootScriptSpendSig) > 0 {
-				hasSigs = true
-				break
-			}
-		}
-		if hasSigs {
-			introCheckpointsByTxid[cp.UnsignedTx.TxHash().String()] = cpB64
-		}
-	}
-
-	// Merge sigs and finalize checkpoints.
-	// The swap VTXO checkpoint needs server + introspector sigs.
-	// Taker VTXO checkpoints need server + taker sigs.
-	finalCheckpoints := make([]string, 0, len(serverSignedCheckpoints))
-	for _, serverCpB64 := range serverSignedCheckpoints {
-		serverCp, err := psbt.NewFromRawBytes(strings.NewReader(serverCpB64), true)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse server checkpoint: %w", err)
-		}
-		serverTxid := serverCp.UnsignedTx.TxHash().String()
-
-		// Check if the introspector signed this checkpoint (swap VTXO)
-		introCpB64, hasIntroSig := introCheckpointsByTxid[serverTxid]
-		if hasIntroSig {
-			// Swap input: merge introspector sig into server checkpoint
-			introCp, err := psbt.NewFromRawBytes(strings.NewReader(introCpB64), true)
-			if err == nil {
-				for j := range introCp.Inputs {
-					if j < len(serverCp.Inputs) && len(introCp.Inputs[j].TaprootScriptSpendSig) > 0 {
-						serverCp.Inputs[j].TaprootScriptSpendSig = append(
-							serverCp.Inputs[j].TaprootScriptSpendSig,
-							introCp.Inputs[j].TaprootScriptSpendSig...,
-						)
-					}
-				}
-			}
-
-			cpB64, err := serverCp.B64Encode()
-			if err != nil {
-				return nil, fmt.Errorf("failed to encode merged checkpoint: %w", err)
-			}
-			finalCheckpoints = append(finalCheckpoints, cpB64)
-		} else {
-			// Taker input: sign with taker key
-			signedCpB64, err := arkClient.SignTransaction(ctx, serverCpB64)
-			if err != nil {
-				return nil, fmt.Errorf("failed to sign checkpoint %s: %w", serverTxid, err)
-			}
-			finalCheckpoints = append(finalCheckpoints, signedCpB64)
-		}
-	}
-
-	if err := arkClient.Client().FinalizeTx(ctx, arkTxid, finalCheckpoints); err != nil {
-		return nil, fmt.Errorf("finalization failed: %w", err)
-	}
+	arkTxid := finalArkPtx.UnsignedTx.TxHash().String()
+	log.WithField("arkTxid", arkTxid).Debug("taker: introspector finalized fulfill tx")
 
 	return &FulfillResult{ArkTxid: arkTxid}, nil
 }
