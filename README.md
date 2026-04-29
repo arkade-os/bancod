@@ -10,41 +10,64 @@ via an introspector-signed Ark transaction.
 
 ### `pkg/contract`
 
-Protocol primitives for the banco swap. 
+Wire-protocol primitives for the banco swap.
 
-- `Offer` — typed representation of a banco swap offer, encoded as a TLV payload
-  inside an Ark extension packet (`PacketType = 0x03`). Provides `Serialize`,
-  `DeserializeOffer`, `ToPacket`, and `VtxoScript` (builds the swap taproot tree
-  from the maker, introspector, and signer keys).
-- `CreateOffer` — maker-side helper: queries the introspector for its signer key,
-  derives the maker address from the ark client, assembles an `Offer`, and returns
-  the hex-encoded offer + extension packet + swap address to fund.
-- `GetOffers` — queries the indexer for VTXOs sitting at a swap address, used by
-  a maker to check whether its offer is still live.
-- `FulfillOffer` — taker-side atomic swap: builds the Ark transaction that spends
-  the swap VTXO to the maker's pkScript (paying the `WantAmount`/`WantAsset`) and
-  returns change to the taker, signs it with the introspector, and submits it.
+- `Offer` — typed banco swap offer, encoded as a TLV payload inside an Ark
+  extension packet (`PacketType = 0x03`). Methods: `Serialize`, `ToPacket`,
+  `FulfillScript`, and `VtxoScript` (builds the swap taproot tree from the
+  maker, introspector, and signer keys).
+- `DeserializeOffer` / `FindBancoOffer` — decode an offer from raw bytes or
+  pull one out of an Ark extension.
+- `CreateOffer` — maker-side helper: queries the introspector for its signer
+  key, derives the maker address from the ark client, assembles an `Offer`,
+  and returns the hex-encoded offer + extension packet + swap address to
+  fund (`CreateOfferParams` / `CreateOfferResult`).
+- `GetOffers` — queries the indexer for VTXOs sitting at a swap address, used
+  by a maker to check whether its offer is still live (`[]OfferStatus`).
+- `FulfillOffer` — taker-side atomic swap: builds the Ark transaction that
+  spends the swap VTXO to the maker's pkScript (paying `WantAmount`/`WantAsset`)
+  and returns change to the taker, signs it with the introspector, and submits
+  it (`FulfillResult`).
 
 ### `pkg/solver`
 
-The solver engine. Consumes an offer stream, matches against configured trading
-pairs, and drives fulfillment via `pkg/contract`. It's the base building block for taker bot.
+Generic plugin-based solver runtime. Consumes a stream of PSBT packets and
+dispatches each one to its registered plugins.
 
-- `Solver` — subscribes to `arkd`'s transaction stream, decodes banco offer
-  packets out of each `ArkTx`, and fulfills those matching a pair. Exposes
-  `Start` / `Stop` / `Status`.
-- `Config` — dependencies: `ArkClient`, introspector client, `PairRepository`,
-  `PriceFeed`, and an optional `FulfillmentListener`.
-- `Pair` — trading pair definition (`base/quote`, min/max amount, decimals,
-  price-feed URL, invert flag). `PairRepository` is the read interface used by
-  the engine.
-- `PriceFeed` / `priceCache` — pluggable price source with an in-memory TTL
-  cache (default 5 minutes).
+- `Plugin` interface — `Match(ctx, *psbt.Packet) (intent any, ok bool)` decides
+  whether a tx is interesting; `Solve(ctx, intent)` reacts to a match.
+- `Solver` / `New(plugins ...Plugin)` — runtime wrapping one or more plugins.
+- `Run(ctx, <-chan *psbt.Packet) error` — drains the channel sequentially,
+  fans matches out to `Solve` goroutines. Returns `ctx.Err()` on cancel,
+  `nil` when the channel closes.
+
+### `pkg/banco`
+
+The banco-specific solver plugin and its supporting types — the building block
+for a taker bot.
+
+- `Plugin` / `NewPlugin(Config)` — implements `solver.Plugin` for the banco
+  swap protocol: decodes the offer from a tx, looks up a matching configured
+  pair, range-checks `WantAmount`, validates price within 1% of the feed, and
+  fulfills via `contract.FulfillOffer`.
+- `Config` — dependencies: `arksdk.ArkClient`, introspector client,
+  `PairRepository`, `PriceFeed`, optional `FulfillmentListener`, optional
+  `logrus.FieldLogger`, and `PriceCacheTTL` (default 5 minutes).
+- `Offer` / `NewOffer(*wire.MsgTx)` — wraps `contract.Offer` with `FundingTxid`,
+  `DepositAsset`, and `DepositAmount` extracted from the funding tx. Helpers:
+  `IsBTCDeposit`, `DepositAssetStr`, `WantAssetStr`, `ComputePrice`.
+- `Pair` / `PairRepository` — trading pair definition (`base/quote`, min/max
+  amount, decimals, price-feed URL, invert flag) and the read-only repository
+  interface used by the plugin.
+- `PriceFeed` — pluggable price source; the plugin wraps it in an internal
+  TTL cache.
 - `FulfillmentEvent` / `FulfillmentListener` — emitted after every successful
   fulfillment; the daemon wires a listener that persists trades to SQLite.
+- `SubscribeArkd` — helper that returns a `<-chan *psbt.Packet` from arkd's
+  transaction stream, suitable for feeding into `Solver.Run`.
 
-Both `pkg/` packages are intended to be importable by other projects and do
-not depend on any `internal/` code.
+All three `pkg/` packages are intended to be importable by other projects and
+do not depend on any `internal/` code.
 
 ---
 
@@ -101,3 +124,7 @@ make setup-test-env     # boot nigiri + arkd + introspector, fund arkd wallet
 make integrationtest    # run ./test/e2e/...
 make teardown-test-env
 ```
+
+If nigiri is already running (e.g. in CI, where the `vulpemventures/nigiri-github-action`
+sets it up), use `make docker-run` and `make docker-stop` instead — they bring up
+the bancod-side stack and fund the arkd wallet without touching nigiri.
