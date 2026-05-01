@@ -6,24 +6,27 @@ import (
 	"time"
 
 	introclient "github.com/ArkLabsHQ/introspector/pkg/client"
+	"github.com/arkade-os/arkd/pkg/ark-lib/extension"
 	arksdk "github.com/arkade-os/go-sdk"
 	"github.com/btcsuite/btcd/btcutil/psbt"
 	"github.com/sirupsen/logrus"
 
 	"github.com/arkade-os/bancod/pkg/contract"
 	"github.com/arkade-os/bancod/pkg/solver"
+	"github.com/arkade-os/bancod/pkg/solver/builder"
 )
 
-// MatchedOffer is the typed intent emitted by Plugin.Match and consumed
-// by Plugin.Solve. It carries the parsed offer plus the matched pair so
-// Solve doesn't redo lookups.
+// MatchedOffer is the typed intent produced by the banco Plugin's decode
+// stage and consumed by Solve. It carries the parsed offer plus the matched
+// pair so Solve doesn't redo lookups.
 type MatchedOffer struct {
 	Offer *Offer
 	Pair  *Pair
 }
 
-// Plugin implements solver.Plugin[*MatchedOffer] for the banco swap protocol.
-type Plugin struct {
+// plugin holds the runtime state shared across builder stages. It's
+// constructed by NewPlugin and never escapes the package.
+type plugin struct {
 	arkClient    arksdk.ArkClient
 	introspector introclient.TransportClient
 	pairs        PairRepository
@@ -32,10 +35,13 @@ type Plugin struct {
 	log          logrus.FieldLogger
 }
 
-// NewPlugin builds a banco Plugin from a Config.
-func NewPlugin(cfg Config) *Plugin {
+// NewPlugin builds a banco solver.Plugin. Authoring uses builder.ForExtension
+// because banco needs multi-TLV access (offer payload + asset packet); the
+// framework handles OP_RETURN parsing and we only write protocol-specific
+// decode + validators + solve.
+func NewPlugin(cfg Config) solver.Plugin {
 	cfg = cfg.WithDefault()
-	return &Plugin{
+	p := &plugin{
 		arkClient:    cfg.SolverClient,
 		introspector: cfg.Introspector,
 		pairs:        cfg.PairsRepository,
@@ -43,106 +49,103 @@ func NewPlugin(cfg Config) *Plugin {
 		listener:     cfg.Listener,
 		log:          cfg.Log,
 	}
+	solverPlugin := builder.ForExtension(p.decode).
+		Validate(p.checkAmountInRange).
+		Validate(p.checkPriceTolerance).
+		Validate(p.checkBTCBalance).
+		Solve(p.fulfill).
+		WithLogger(p.log).
+		Build()
+
+	return solverPlugin
 }
 
-var _ solver.Plugin = (*Plugin)(nil)
-
-// Match decodes the banco offer from the tx extension, looks up a matching
-// configured pair, validates amount range and price, and returns a typed
-// MatchedOffer if everything checks out.
-func (p *Plugin) Match(ctx context.Context, tx *psbt.Packet) (any, bool) {
-	if tx == nil {
-		return nil, false
-	}
-
-	// 1. Decode banco offer from extension.
-	offer, err := NewOffer(tx.UnsignedTx)
+// decode turns a tx + parsed extension into a *MatchedOffer. Returns
+// builder.ErrSkip when the tx isn't a banco offer or no configured pair
+// matches.
+func (p *plugin) decode(ctx context.Context, tx *psbt.Packet, ext extension.Extension) (*MatchedOffer, error) {
+	offer, err := NewOfferFromExtension(tx.UnsignedTx, ext)
 	if err != nil {
-		p.log.WithError(err).Warn("failed to decode banco offer")
-		return nil, false
+		return nil, err
 	}
 	if offer == nil {
-		return nil, false
+		return nil, builder.ErrSkip
 	}
-
-	// 2. Look up a matching pair.
 	if p.pairs == nil {
-		return nil, false
+		return nil, builder.ErrSkip
 	}
 	pairs, err := p.pairs.List(ctx)
 	if err != nil {
-		p.log.WithError(err).Warn("failed to list pairs")
-		return nil, false
+		return nil, fmt.Errorf("list pairs: %w", err)
 	}
 	pair := findMatchingPair(pairs, offer)
 	if pair == nil {
-		return nil, false
+		return nil, builder.ErrSkip
 	}
+	return &MatchedOffer{Offer: offer, Pair: pair}, nil
+}
 
-	// 3. Range-check WantAmount.
-	if offer.WantAmount < pair.MinAmount || offer.WantAmount > pair.MaxAmount {
-		return nil, false
+// checkAmountInRange silently rejects offers outside the configured pair's
+// MinAmount/MaxAmount window.
+func (p *plugin) checkAmountInRange(_ context.Context, m *MatchedOffer) (bool, error) {
+	if m.Offer.WantAmount < m.Pair.MinAmount || m.Offer.WantAmount > m.Pair.MaxAmount {
+		return false, nil
 	}
+	return true, nil
+}
 
-	// 4. Validate price within 1% of feed.
-	feedPrice, err := p.prices.get(ctx, pair.PriceFeed)
+// checkPriceTolerance rejects offers whose price deviates more than 1% from
+// the feed. Logs (Warn) when the price feed is unavailable or stale.
+func (p *plugin) checkPriceTolerance(ctx context.Context, m *MatchedOffer) (bool, error) {
+	feedPrice, err := p.prices.get(ctx, m.Pair.PriceFeed)
 	if err != nil && feedPrice == 0 {
 		p.log.WithError(err).Warn("price feed unavailable, skipping offer")
-		return nil, false
+		return false, nil
 	}
 	if err != nil {
 		p.log.WithError(err).Warn("using stale price feed")
 	}
-	if pair.InvertPrice {
+	if m.Pair.InvertPrice {
 		feedPrice = 1.0 / feedPrice
 	}
-
-	offerPrice, ok := offer.ComputePrice(pair)
+	offerPrice, ok := m.Offer.ComputePrice(m.Pair)
 	if !ok {
-		return nil, false
+		return false, nil
 	}
-	if !validatePrice(offerPrice, feedPrice) {
-		return nil, false
-	}
-
-	return &MatchedOffer{Offer: offer, Pair: pair}, true
+	return validatePrice(offerPrice, feedPrice), nil
 }
 
-// Solve fulfills the matched offer atomically using contract.FulfillOffer
-// and notifies the FulfillmentListener if one is configured.
-func (p *Plugin) Solve(ctx context.Context, intent any) {
-	m, ok := intent.(*MatchedOffer)
-	if !ok || m == nil || m.Offer == nil {
-		return
+// checkBTCBalance ensures we hold enough offchain BTC to honor a BTC-deposit
+// offer. Asset deposits skip this check.
+func (p *plugin) checkBTCBalance(ctx context.Context, m *MatchedOffer) (bool, error) {
+	if m.Offer.WantAsset != nil {
+		return true, nil
 	}
-
-	// BTC deposits require sufficient offchain balance.
-	if m.Offer.WantAsset == nil {
-		bal, err := p.arkClient.Balance(ctx)
-		if err != nil {
-			p.log.WithError(err).Warn("failed to get balance")
-			return
-		}
-		if bal.OffchainBalance.Total < m.Offer.WantAmount {
-			err := fmt.Errorf(
-				"insufficient offchain balance: have %d want %d",
-				bal.OffchainBalance.Total, m.Offer.WantAmount,
-			)
-			p.log.Warn(err.Error())
-			return
-		}
+	bal, err := p.arkClient.Balance(ctx)
+	if err != nil {
+		return false, fmt.Errorf("get balance: %w", err)
 	}
+	if bal.OffchainBalance.Total < m.Offer.WantAmount {
+		p.log.Warnf(
+			"insufficient offchain balance: have %d want %d",
+			bal.OffchainBalance.Total, m.Offer.WantAmount,
+		)
+		return false, nil
+	}
+	return true, nil
+}
 
+// fulfill is the terminal action — atomically settles the matched offer and
+// notifies the FulfillmentListener if one is configured.
+func (p *plugin) fulfill(ctx context.Context, m *MatchedOffer) {
 	result, err := contract.FulfillOffer(ctx, m.Offer.Offer, p.arkClient, p.introspector)
 	if err != nil {
 		p.log.WithError(err).Warn("fulfillment failed")
 		return
 	}
-
 	if p.listener == nil {
 		return
 	}
-
 	p.listener.OnFulfill(ctx, FulfillmentEvent{
 		Pair:          m.Pair.Pair,
 		DepositAsset:  m.Offer.DepositAssetStr(),

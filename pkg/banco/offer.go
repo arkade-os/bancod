@@ -26,7 +26,14 @@ func NewOffer(tx *wire.MsgTx) (*Offer, error) {
 	if err != nil {
 		return nil, nil
 	}
+	return NewOfferFromExtension(tx, ext)
+}
 
+// NewOfferFromExtension produces an *Offer from a transaction whose ark
+// extension has already been parsed (e.g. by builder.ForExtension). Returns
+// nil if no banco offer is present in the extension or no matching swap
+// output is found.
+func NewOfferFromExtension(tx *wire.MsgTx, ext extension.Extension) (*Offer, error) {
 	offer, err := contract.FindBancoOffer(ext)
 	if err != nil {
 		return nil, err
