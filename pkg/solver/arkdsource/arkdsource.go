@@ -1,4 +1,7 @@
-package banco
+// Package arkdsource provides an arkd-backed source of *psbt.Packet for the
+// solver runtime. It is split from pkg/solver to keep the solver package
+// free of any arkd/go-sdk dependency.
+package arkdsource
 
 import (
 	"context"
@@ -9,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// SubscribeArkd subscribes to arkd's transaction stream and returns a channel
+// Subscribe subscribes to arkd's transaction stream and returns a channel
 // of *psbt.Packet for every ArkTx event. The channel is closed when:
 //   - ctx is canceled
 //   - the upstream stream errors out at subscribe time
@@ -17,7 +20,7 @@ import (
 //
 // Decoding errors on individual events are logged and skipped — the consumer
 // receives only successfully-parsed packets.
-func SubscribeArkd(
+func Subscribe(
 	ctx context.Context,
 	c arksdk.ArkClient,
 	log logrus.FieldLogger,

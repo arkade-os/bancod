@@ -15,6 +15,7 @@ import (
 	"github.com/arkade-os/bancod/internal/core/ports"
 	"github.com/arkade-os/bancod/pkg/banco"
 	"github.com/arkade-os/bancod/pkg/solver"
+	"github.com/arkade-os/bancod/pkg/solver/arkdsource"
 )
 
 const btcDecimals = 8
@@ -78,7 +79,7 @@ func (svc *TakerService) Start() {
 	svc.cancel = cancel
 	svc.done = make(chan struct{})
 
-	txs := banco.SubscribeArkd(ctx, svc.arkClient, svc.log)
+	txs := arkdsource.Subscribe(ctx, svc.arkClient, svc.log)
 	svc.setRunning(true)
 	go func() {
 		defer close(svc.done)

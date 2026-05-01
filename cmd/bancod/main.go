@@ -80,7 +80,7 @@ func main() {
 		Listener:        tradeListener,
 		Log:             log,
 	})
-	s := solver.New(plugin)
+	s := solver.New(plugin).WithLogger(log)
 
 	takerSvc := application.NewTakerService(s, pairRepo, tradeRepo, arkClient, arkClient.Indexer(), log)
 
