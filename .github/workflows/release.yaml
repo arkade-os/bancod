@@ -1,0 +1,83 @@
+name: Release Binaries and Docker Build
+
+on:
+  release:
+    types: [released, prereleased]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        binary: [bancod, banco]
+        os: [linux, darwin]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.26.2
+
+      - name: Build ${{ matrix.binary }} (${{ matrix.os }}/${{ matrix.arch }})
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p build
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" \
+            -o build/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} \
+            ./cmd/${{ matrix.binary }}
+
+      - name: Upload ${{ matrix.binary }} (${{ matrix.os }}/${{ matrix.arch }})
+        uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./build/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+          asset_name: ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+          asset_content_type: application/octet-stream
+
+  docker-build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Build and push bancod Docker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # :latest only moves on stable releases; pre-releases push only the tag.
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}
+            ${{ github.event.release.prerelease == false && format('{0}:latest', env.IMAGE_NAME) || '' }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ github.event.release.tag_name }}

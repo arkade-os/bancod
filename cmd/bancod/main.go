@@ -21,6 +21,10 @@ import (
 	"github.com/arkade-os/bancod/pkg/solver"
 )
 
+// Version is injected at build time via -ldflags "-X main.Version=<tag>".
+// Defaults to "dev" for local builds.
+var Version = "dev"
+
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -90,7 +94,7 @@ func main() {
 	if err := srv.Start(); err != nil {
 		log.WithError(err).Fatal("failed to start server")
 	}
-	log.Info("bancod started")
+	log.WithField("version", Version).Info("bancod started")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

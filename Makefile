@@ -1,4 +1,7 @@
-.PHONY: build clean cov docker docker-run docker-stop format help integrationtest lint proto setup-test-env sqlc teardown-test-env test vet
+.PHONY: build build-all clean cov docker docker-run docker-stop format help integrationtest lint proto setup-test-env sqlc teardown-test-env test vet
+
+VERSION ?= dev
+LDFLAGS := -s -w -X main.Version=$(VERSION)
 
 GOLANGCI_LINT ?= $(shell \
 	echo "docker run --rm -v $$(pwd):/app -w /app golangci/golangci-lint:v2.9.0 golangci-lint"; \
@@ -10,6 +13,20 @@ build:
 	@go build -o bancod ./cmd/bancod/
 	@echo "Building banco CLI..."
 	@go build -o banco ./cmd/banco/
+
+## build-all: cross-compile bancod and banco for linux/darwin × amd64/arm64 (release artifacts)
+build-all:
+	@echo "Building bancod and banco for all release platforms (VERSION=$(VERSION))..."
+	@for goos in linux darwin; do \
+		for goarch in amd64 arm64; do \
+			for bin in bancod banco; do \
+				echo "  -> $$bin-$$goos-$$goarch"; \
+				CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch \
+					go build -trimpath -ldflags "$(LDFLAGS)" \
+					-o build/$$bin-$$goos-$$goarch ./cmd/$$bin/ || exit 1; \
+			done; \
+		done; \
+	done
 
 ## proto: generate protobuf code
 proto:

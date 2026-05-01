@@ -2,6 +2,7 @@ FROM golang:1.26.1 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
 
 WORKDIR /app
 
@@ -10,8 +11,12 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /app/bin/bancod ./cmd/bancod
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /app/bin/banco ./cmd/banco
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" \
+    -o /app/bin/bancod ./cmd/bancod
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" \
+    -o /app/bin/banco ./cmd/banco
 
 FROM alpine:3.20
 
